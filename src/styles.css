@@ -1,17 +1,20 @@
-/* ---------- Tokens ---------- */
+/* ---------- Tokens (tema claro estilo GitMind) ---------- */
 :root {
-  --bosque-950: #142019;
-  --bosque-900: #1b2a22;
-  --bosque-800: #24352c;
-  --pergamino: #f3ecd9;
-  --pergamino-borde: #d8cba7;
-  --tinta: #2b2118;
-  --tinta-suave: #5a5044;
-  --raiz-madera: #8b5e3c;
-  --rama-verde: #6b8f71;
-  --peligro: #a14b3f;
+  --fondo-lienzo: #ffffff;
+  --header-bg: #ffffff;
+  --header-borde: #e8eaed;
+  --texto-principal: #2c3e50;
+  --texto-suave: #8a94a3;
 
-  --fuente-titulo: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+  --nodo-bg: #ffffff;
+  --nodo-sombra: rgba(60, 72, 88, 0.10);
+
+  --raiz-acento: #4a90e2;
+
+  --verde-accion: #34a672;
+  --peligro: #e0554f;
+
+  --fuente-titulo: 'Segoe UI', system-ui, -apple-system, sans-serif;
   --fuente-cuerpo: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
@@ -28,7 +31,7 @@ body,
 
 body {
   font-family: var(--fuente-cuerpo);
-  color: var(--tinta);
+  color: var(--texto-principal);
 }
 
 /* ---------- Layout general ---------- */
@@ -36,7 +39,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--bosque-900);
+  background: var(--fondo-lienzo);
 }
 
 .app-header {
@@ -44,17 +47,18 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: var(--bosque-950);
-  border-bottom: 1px solid var(--bosque-800);
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--header-borde);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  z-index: 5;
 }
 
 .app-header h1 {
   font-family: var(--fuente-titulo);
   font-weight: 600;
-  font-size: 1.4rem;
-  color: var(--pergamino);
+  font-size: 1.25rem;
+  color: var(--texto-principal);
   margin: 0;
-  letter-spacing: 0.3px;
 }
 
 .app-header-info {
@@ -66,15 +70,15 @@ body {
 .contador-nodos,
 .estado-guardado {
   font-size: 0.85rem;
-  color: #a9b8ad;
+  color: var(--texto-suave);
 }
 
 .boton-compartir {
-  background: var(--rama-verde);
-  color: var(--bosque-950);
+  background: var(--raiz-acento);
+  color: #ffffff;
   border: none;
   padding: 8px 16px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
@@ -82,7 +86,7 @@ body {
 }
 
 .boton-compartir:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.08);
 }
 
 .app-lienzo {
@@ -95,43 +99,45 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: var(--bosque-900);
-  color: var(--pergamino);
+  background: var(--fondo-lienzo);
+  color: var(--texto-principal);
   font-family: var(--fuente-titulo);
   font-size: 1.1rem;
 }
 
 /* ---------- Lienzo de React Flow ---------- */
 .react-flow__background {
-  background-color: var(--bosque-900);
-}
-
-.react-flow__edge-path {
-  stroke: var(--rama-verde);
-  stroke-width: 2;
+  background-color: var(--fondo-lienzo);
 }
 
 .react-flow__controls {
-  background: var(--pergamino);
-  border-radius: 6px;
+  background: #ffffff;
+  border-radius: 8px;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--header-borde);
+}
+
+.react-flow__controls button {
+  background: #ffffff;
+  border-bottom: 1px solid var(--header-borde);
+}
+
+.react-flow__minimap {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 /* ---------- Nodo personalizado ---------- */
 .nodo-mapa {
-  background: var(--pergamino);
-  border: 1.5px solid var(--pergamino-borde);
-  border-radius: 6px;
-  padding: 10px 12px;
+  background: var(--nodo-bg);
+  border: 1.5px solid #d5dbe3;
+  border-radius: 8px;
+  padding: 10px 14px;
   min-width: 140px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 6px var(--nodo-sombra);
   position: relative;
-}
-
-.nodo-mapa.nodo-raiz {
-  border-color: var(--raiz-madera);
-  border-width: 2px;
-  background: #f7f0dc;
 }
 
 .nodo-contenido {
@@ -142,7 +148,7 @@ body {
 
 .nodo-texto {
   font-size: 0.95rem;
-  color: var(--tinta);
+  color: var(--texto-principal);
   cursor: text;
   flex: 1;
   word-break: break-word;
@@ -151,8 +157,8 @@ body {
 .nodo-input {
   font-size: 0.95rem;
   font-family: var(--fuente-cuerpo);
-  border: 1px solid var(--raiz-madera);
-  border-radius: 3px;
+  border: 1px solid var(--raiz-acento);
+  border-radius: 4px;
   padding: 2px 6px;
   flex: 1;
   min-width: 80px;
@@ -170,18 +176,18 @@ body {
   background: transparent;
   cursor: pointer;
   font-size: 0.85rem;
-  color: var(--tinta-suave);
+  color: var(--texto-suave);
   padding: 2px 4px;
   line-height: 1;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 .nodo-acciones button:hover {
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(74, 144, 226, 0.08);
 }
 
 .nodo-boton-agregar {
-  color: var(--rama-verde) !important;
+  color: var(--verde-accion) !important;
   font-weight: 700;
 }
 
@@ -203,7 +209,78 @@ body {
   width: 100%;
   font-size: 0.8rem;
   padding: 4px 6px;
-  border: 1px solid var(--pergamino-borde);
-  border-radius: 3px;
+  border: 1px solid #d5dbe3;
+  border-radius: 4px;
   font-family: var(--fuente-cuerpo);
+}
+
+.nodo-toggle-colapso {
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  padding: 0;
+}
+
+.nodo-toggle-colapso:hover {
+  filter: brightness(0.95);
+}
+
+.nodo-imagen-contenedor {
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.nodo-imagen {
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.nodo-imagen-quitar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.nodo-boton-imagen {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.nodo-boton-imagen:hover {
+  background: rgba(74, 144, 226, 0.08);
 }

@@ -1,11 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import ReactFlow, {
-  Background,
   Controls,
   MiniMap,
   addEdge,
-  useNodesState,
-  useEdgesState,
+  applyNodeChanges,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { nanoid } from 'nanoid';
@@ -15,8 +13,9 @@ import './styles.css';
 
 const nodeTypes = { nodoPersonalizado: NodoPersonalizado };
 
-// Toma el id del mapa desde la URL: ?mapa=xxxx
-// Si no hay ninguno, genera uno nuevo y lo pone en la URL para que puedas compartir el enlace.
+const PALETA_RAMAS = ['#e0559a', '#f5a442', '#e0c93f', '#2fa88f', '#8e6fd1', '#4a90e2', '#e0554f'];
+const COLOR_RAIZ = '#334155';
+
 function obtenerMapaId() {
   const params = new URLSearchParams(window.location.search);
   let mapaId = params.get('mapa');
@@ -29,13 +28,13 @@ function obtenerMapaId() {
 }
 
 export default function App() {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes] = useState([]);
+  const [edges, setEdges] = useState([]);
+  const [colapsados, setColapsados] = useState(new Set());
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const mapaId = useRef(obtenerMapaId());
 
-  // --- Guardar un nodo en Supabase (crear o actualizar) ---
   const guardarNodoEnDB = useCallback(async (nodo, padreId) => {
     setGuardando(true);
     await supabase.from('nodos').upsert({
@@ -46,6 +45,8 @@ export default function App() {
       padre_id: padreId || null,
       posicion_x: nodo.position.x,
       posicion_y: nodo.position.y,
+      color: nodo.data.color || null,
+      imagen_url: nodo.data.imagenUrl || null,
     });
     setGuardando(false);
   }, []);
@@ -56,7 +57,6 @@ export default function App() {
     setGuardando(false);
   }, []);
 
-  // --- Acciones sobre nodos (definidas antes de cargar, para inyectarlas en data) ---
   const cambiarTexto = useCallback(
     (id, nuevoTexto) => {
       setNodes((nds) => {
@@ -64,12 +64,15 @@ export default function App() {
           n.id === id ? { ...n, data: { ...n.data, texto: nuevoTexto } } : n
         );
         const nodo = actualizados.find((n) => n.id === id);
-        const edge = edges.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
+        setEdges((eds) => {
+          const edge = eds.find((e) => e.target === id);
+          guardarNodoEnDB(nodo, edge ? edge.source : null);
+          return eds;
+        });
         return actualizados;
       });
     },
-    [edges, guardarNodoEnDB, setNodes]
+    [guardarNodoEnDB]
   );
 
   const cambiarLink = useCallback(
@@ -79,54 +82,90 @@ export default function App() {
           n.id === id ? { ...n, data: { ...n.data, hipervinculo: nuevoLink } } : n
         );
         const nodo = actualizados.find((n) => n.id === id);
-        const edge = edges.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
+        setEdges((eds) => {
+          const edge = eds.find((e) => e.target === id);
+          guardarNodoEnDB(nodo, edge ? edge.source : null);
+          return eds;
+        });
         return actualizados;
       });
     },
-    [edges, guardarNodoEnDB, setNodes]
+    [guardarNodoEnDB]
+  );
+
+  const cambiarImagen = useCallback(
+    (id, nuevaImagenUrl) => {
+      setNodes((nds) => {
+        const actualizados = nds.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, imagenUrl: nuevaImagenUrl } } : n
+        );
+        const nodo = actualizados.find((n) => n.id === id);
+        setEdges((eds) => {
+          const edge = eds.find((e) => e.target === id);
+          guardarNodoEnDB(nodo, edge ? edge.source : null);
+          return eds;
+        });
+        return actualizados;
+      });
+    },
+    [guardarNodoEnDB]
   );
 
   const eliminarNodo = useCallback(
     (id) => {
-      // Elimina el nodo y todos sus descendientes (en cascada, igual que en la BD)
       setNodes((nds) => {
-        const idsAEliminar = new Set([id]);
-        let cambiado = true;
-        while (cambiado) {
-          cambiado = false;
-          edges.forEach((e) => {
-            if (idsAEliminar.has(e.source) && !idsAEliminar.has(e.target)) {
-              idsAEliminar.add(e.target);
-              cambiado = true;
-            }
-          });
-        }
-        idsAEliminar.forEach((idBorrar) => eliminarNodoEnDB(idBorrar));
+        let idsAEliminar = new Set([id]);
+        setEdges((eds) => {
+          let cambiado = true;
+          while (cambiado) {
+            cambiado = false;
+            eds.forEach((e) => {
+              if (idsAEliminar.has(e.source) && !idsAEliminar.has(e.target)) {
+                idsAEliminar.add(e.target);
+                cambiado = true;
+              }
+            });
+          }
+          idsAEliminar.forEach((idBorrar) => eliminarNodoEnDB(idBorrar));
+          return eds.filter((e) => !idsAEliminar.has(e.source) && !idsAEliminar.has(e.target));
+        });
         return nds.filter((n) => !idsAEliminar.has(n.id));
       });
-      setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
     },
-    [edges, eliminarNodoEnDB, setEdges, setNodes]
+    [eliminarNodoEnDB]
   );
 
+  const toggleColapso = useCallback((id) => {
+    setColapsados((prev) => {
+      const siguiente = new Set(prev);
+      if (siguiente.has(id)) siguiente.delete(id);
+      else siguiente.add(id);
+      return siguiente;
+    });
+  }, []);
+
   const crearNodo = useCallback(
-    (texto, posicion, esRaiz = false) => ({
+    (texto, posicion, esRaiz = false, color = COLOR_RAIZ) => ({
       id: nanoid(8),
       type: 'nodoPersonalizado',
       position: posicion,
       data: {
         texto,
         hipervinculo: '',
+        imagenUrl: null,
         esRaiz,
+        color,
         onCambiarTexto: cambiarTexto,
         onCambiarLink: cambiarLink,
+        onCambiarImagen: cambiarImagen,
         onEliminar: eliminarNodo,
-        onAgregarHijo: null, // se asigna abajo tras definir agregarHijo
+        onAgregarHijo: null,
       },
     }),
-    [cambiarTexto, cambiarLink, eliminarNodo]
+    [cambiarTexto, cambiarLink, cambiarImagen, eliminarNodo]
   );
+
+  const agregarHijoRef = useRef();
 
   const agregarHijo = useCallback(
     (padreId) => {
@@ -134,37 +173,44 @@ export default function App() {
         const padre = nds.find((n) => n.id === padreId);
         if (!padre) return nds;
 
-        const hijosDelPadre = edges.filter((e) => e.source === padreId).length;
-        const nuevaPos = {
-          x: padre.position.x + 260,
-          y: padre.position.y + hijosDelPadre * 90,
-        };
+        let colorAsignado = padre.data.color;
+        let nuevaPos = { x: padre.position.x + 260, y: padre.position.y };
 
-        const nuevoNodo = crearNodo('Nuevo nodo', nuevaPos);
-        nuevoNodo.data.onAgregarHijo = agregarHijoRef.current;
+        setEdges((eds) => {
+          const hijosDelPadre = eds.filter((e) => e.source === padreId).length;
+          nuevaPos = { x: padre.position.x + 260, y: padre.position.y + hijosDelPadre * 90 };
+          colorAsignado = padre.data.esRaiz
+            ? PALETA_RAMAS[hijosDelPadre % PALETA_RAMAS.length]
+            : padre.data.color;
 
-        setEdges((eds) =>
-          addEdge(
-            { id: `e-${padreId}-${nuevoNodo.id}`, source: padreId, target: nuevoNodo.id },
-            eds
-          )
-        );
+          const nuevoNodo = crearNodo('Nuevo nodo', nuevaPos, false, colorAsignado);
+          nuevoNodo.data.onAgregarHijo = agregarHijoRef.current;
+          guardarNodoEnDB(nuevoNodo, padreId);
 
-        guardarNodoEnDB(nuevoNodo, padreId);
+          setNodes((nds2) => [...nds2, nuevoNodo]);
 
-        return [...nds, nuevoNodo];
+          return [
+            ...eds,
+            {
+              id: `e-${padreId}-${nuevoNodo.id}`,
+              source: padreId,
+              target: nuevoNodo.id,
+              type: 'smoothstep',
+              style: { stroke: colorAsignado, strokeWidth: 2 },
+            },
+          ];
+        });
+
+        return nds;
       });
     },
-    [edges, crearNodo, guardarNodoEnDB, setEdges, setNodes]
+    [crearNodo, guardarNodoEnDB]
   );
 
-  // Ref para poder auto-referenciar agregarHijo dentro de crearNodo (evita dependencia circular)
-  const agregarHijoRef = useRef();
   useEffect(() => {
     agregarHijoRef.current = agregarHijo;
   }, [agregarHijo]);
 
-  // --- Cargar el mapa desde Supabase al iniciar ---
   useEffect(() => {
     async function cargarMapa() {
       setCargando(true);
@@ -180,32 +226,36 @@ export default function App() {
       }
 
       if (!data || data.length === 0) {
-        // Mapa nuevo: crea el nodo raíz
-        const raiz = crearNodo('Tema central', { x: 50, y: 200 }, true);
-        raiz.data.onAgregarHijo = agregarHijoRef.current;
+        const raiz = crearNodo('Tema central', { x: 50, y: 200 }, true, COLOR_RAIZ);
+        raiz.data.onAgregarHijo = (id) => agregarHijoRef.current(id);
         setNodes([raiz]);
         guardarNodoEnDB(raiz, null);
       } else {
-        const nodosCargados = data.map((fila) =>
-          Object.assign(crearNodo(fila.texto, { x: fila.posicion_x, y: fila.posicion_y }, !fila.padre_id), {
-            id: fila.id,
-            data: {
-              texto: fila.texto,
-              hipervinculo: fila.hipervinculo || '',
-              esRaiz: !fila.padre_id,
-              onCambiarTexto: cambiarTexto,
-              onCambiarLink: cambiarLink,
-              onEliminar: eliminarNodo,
-              onAgregarHijo: (id) => agregarHijoRef.current(id),
-            },
-          })
-        );
+        const nodosCargados = data.map((fila) => ({
+          id: fila.id,
+          type: 'nodoPersonalizado',
+          position: { x: fila.posicion_x, y: fila.posicion_y },
+          data: {
+            texto: fila.texto,
+            hipervinculo: fila.hipervinculo || '',
+            imagenUrl: fila.imagen_url || null,
+            esRaiz: !fila.padre_id,
+            color: fila.color || (!fila.padre_id ? COLOR_RAIZ : '#9fb3c8'),
+            onCambiarTexto: cambiarTexto,
+            onCambiarLink: cambiarLink,
+            onCambiarImagen: cambiarImagen,
+            onEliminar: eliminarNodo,
+            onAgregarHijo: (id) => agregarHijoRef.current(id),
+          },
+        }));
         const edgesCargados = data
           .filter((fila) => fila.padre_id)
           .map((fila) => ({
             id: `e-${fila.padre_id}-${fila.id}`,
             source: fila.padre_id,
             target: fila.id,
+            type: 'smoothstep',
+            style: { stroke: fila.color || '#9fb3c8', strokeWidth: 2 },
           }));
 
         setNodes(nodosCargados);
@@ -218,12 +268,72 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const onNodesChange = useCallback(
+    (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
+    []
+  );
+
   const onNodeDragStop = useCallback(
     (_, nodo) => {
       const edge = edges.find((e) => e.target === nodo.id);
       guardarNodoEnDB(nodo, edge ? edge.source : null);
     },
     [edges, guardarNodoEnDB]
+  );
+
+  // --- Calcular cuantos descendientes tiene cada nodo (para el contador al colapsar) ---
+  const conteoDescendientes = useMemo(() => {
+    const mapa = {};
+    function contar(id) {
+      if (mapa[id] !== undefined) return mapa[id];
+      const hijos = edges.filter((e) => e.source === id).map((e) => e.target);
+      let total = hijos.length;
+      hijos.forEach((h) => {
+        total += contar(h);
+      });
+      mapa[id] = total;
+      return total;
+    }
+    nodes.forEach((n) => contar(n.id));
+    return mapa;
+  }, [nodes, edges]);
+
+  // --- Calcular que nodos quedan ocultos por estar dentro de una rama colapsada ---
+  const idsOcultos = useMemo(() => {
+    const ocultos = new Set();
+    colapsados.forEach((id) => {
+      const pila = edges.filter((e) => e.source === id).map((e) => e.target);
+      while (pila.length) {
+        const actual = pila.pop();
+        if (!ocultos.has(actual)) {
+          ocultos.add(actual);
+          edges.filter((e) => e.source === actual).forEach((e) => pila.push(e.target));
+        }
+      }
+    });
+    return ocultos;
+  }, [edges, colapsados]);
+
+  const nodosVisibles = useMemo(
+    () =>
+      nodes
+        .filter((n) => !idsOcultos.has(n.id))
+        .map((n) => ({
+          ...n,
+          data: {
+            ...n.data,
+            tieneHijos: edges.some((e) => e.source === n.id),
+            colapsado: colapsados.has(n.id),
+            hijosOcultosCount: conteoDescendientes[n.id] || 0,
+            onToggleColapso: toggleColapso,
+          },
+        })),
+    [nodes, edges, idsOcultos, colapsados, conteoDescendientes, toggleColapso]
+  );
+
+  const edgesVisibles = useMemo(
+    () => edges.filter((e) => !idsOcultos.has(e.source) && !idsOcultos.has(e.target)),
+    [edges, idsOcultos]
   );
 
   const copiarEnlaceCompartible = () => {
@@ -250,15 +360,13 @@ export default function App() {
 
       <div className="app-lienzo">
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={nodosVisibles}
+          edges={edgesVisibles}
           onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           fitView
         >
-          <Background gap={20} />
           <Controls />
           <MiniMap pannable zoomable />
         </ReactFlow>
