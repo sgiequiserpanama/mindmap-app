@@ -1,0 +1,209 @@
+/* ---------- Tokens ---------- */
+:root {
+  --bosque-950: #142019;
+  --bosque-900: #1b2a22;
+  --bosque-800: #24352c;
+  --pergamino: #f3ecd9;
+  --pergamino-borde: #d8cba7;
+  --tinta: #2b2118;
+  --tinta-suave: #5a5044;
+  --raiz-madera: #8b5e3c;
+  --rama-verde: #6b8f71;
+  --peligro: #a14b3f;
+
+  --fuente-titulo: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+  --fuente-cuerpo: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--fuente-cuerpo);
+  color: var(--tinta);
+}
+
+/* ---------- Layout general ---------- */
+.app-contenedor {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bosque-900);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--bosque-950);
+  border-bottom: 1px solid var(--bosque-800);
+}
+
+.app-header h1 {
+  font-family: var(--fuente-titulo);
+  font-weight: 600;
+  font-size: 1.4rem;
+  color: var(--pergamino);
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+.app-header-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.contador-nodos,
+.estado-guardado {
+  font-size: 0.85rem;
+  color: #a9b8ad;
+}
+
+.boton-compartir {
+  background: var(--rama-verde);
+  color: var(--bosque-950);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.boton-compartir:hover {
+  filter: brightness(1.1);
+}
+
+.app-lienzo {
+  flex: 1;
+  position: relative;
+}
+
+.pantalla-carga {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--bosque-900);
+  color: var(--pergamino);
+  font-family: var(--fuente-titulo);
+  font-size: 1.1rem;
+}
+
+/* ---------- Lienzo de React Flow ---------- */
+.react-flow__background {
+  background-color: var(--bosque-900);
+}
+
+.react-flow__edge-path {
+  stroke: var(--rama-verde);
+  stroke-width: 2;
+}
+
+.react-flow__controls {
+  background: var(--pergamino);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* ---------- Nodo personalizado ---------- */
+.nodo-mapa {
+  background: var(--pergamino);
+  border: 1.5px solid var(--pergamino-borde);
+  border-radius: 6px;
+  padding: 10px 12px;
+  min-width: 140px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.nodo-mapa.nodo-raiz {
+  border-color: var(--raiz-madera);
+  border-width: 2px;
+  background: #f7f0dc;
+}
+
+.nodo-contenido {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nodo-texto {
+  font-size: 0.95rem;
+  color: var(--tinta);
+  cursor: text;
+  flex: 1;
+  word-break: break-word;
+}
+
+.nodo-input {
+  font-size: 0.95rem;
+  font-family: var(--fuente-cuerpo);
+  border: 1px solid var(--raiz-madera);
+  border-radius: 3px;
+  padding: 2px 6px;
+  flex: 1;
+  min-width: 80px;
+}
+
+.nodo-acciones {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.nodo-acciones button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--tinta-suave);
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.nodo-acciones button:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.nodo-boton-agregar {
+  color: var(--rama-verde) !important;
+  font-weight: 700;
+}
+
+.nodo-boton-eliminar {
+  color: var(--peligro) !important;
+  font-weight: 700;
+}
+
+.nodo-link-icono {
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.nodo-link-editor {
+  margin-top: 6px;
+}
+
+.nodo-link-input {
+  width: 100%;
+  font-size: 0.8rem;
+  padding: 4px 6px;
+  border: 1px solid var(--pergamino-borde);
+  border-radius: 3px;
+  font-family: var(--fuente-cuerpo);
+}
