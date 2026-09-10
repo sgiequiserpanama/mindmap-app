@@ -284,3 +284,285 @@ body {
 .nodo-boton-imagen:hover {
   background: rgba(74, 144, 226, 0.08);
 }
+
+.nodo-boton-notas {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.nodo-boton-notas:hover {
+  background: rgba(74, 144, 226, 0.08);
+}
+
+.nodo-notas-vista {
+  font-size: 0.78rem;
+  color: var(--texto-suave);
+  background: #f7f9fb;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin-bottom: 6px;
+  max-height: 60px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  cursor: text;
+}
+
+.nodo-notas-input {
+  width: 100%;
+  min-height: 60px;
+  font-size: 0.8rem;
+  padding: 4px 6px;
+  border: 1px solid #d5dbe3;
+  border-radius: 4px;
+  font-family: var(--fuente-cuerpo);
+  resize: vertical;
+}
+
+/* ---------- Pantalla de inicio (Mis Mapas) ---------- */
+.app-header-izquierda {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.boton-volver {
+  font-size: 0.85rem;
+  color: var(--raiz-acento);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.boton-volver:hover {
+  text-decoration: underline;
+}
+
+.home-contenedor {
+  min-height: 100vh;
+  background: var(--fondo-lienzo);
+}
+
+.home-contenido {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+.home-form-nuevo {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
+  background: #f7f9fb;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid var(--header-borde);
+}
+
+.home-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 9px 12px;
+  border: 1px solid #d5dbe3;
+  border-radius: 6px;
+  font-family: var(--fuente-cuerpo);
+  font-size: 0.9rem;
+}
+
+.home-vacio {
+  color: var(--texto-suave);
+  text-align: center;
+  padding: 40px 0;
+}
+
+.home-carpeta {
+  margin-bottom: 28px;
+}
+
+.home-carpeta-titulo {
+  font-size: 1rem;
+  color: var(--texto-principal);
+  margin: 0 0 12px 0;
+}
+
+.home-lista-mapas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-tarjeta-mapa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid var(--header-borde);
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.home-tarjeta-mapa:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: var(--raiz-acento);
+}
+
+.home-tarjeta-nombre {
+  font-size: 0.95rem;
+  color: var(--texto-principal);
+  font-weight: 500;
+}
+
+.home-tarjeta-eliminar {
+  border: none;
+  background: transparent;
+  color: var(--peligro);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.home-tarjeta-eliminar:hover {
+  background: rgba(224, 85, 79, 0.1);
+}
+
+/* ---------- Botones de vista y exportar ---------- */
+.boton-vista {
+  background: transparent;
+  border: 1px solid var(--header-borde);
+  color: var(--texto-suave);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.boton-vista.activo {
+  background: var(--raiz-acento);
+  color: #ffffff;
+  border-color: var(--raiz-acento);
+}
+
+.boton-secundario {
+  background: #ffffff;
+  border: 1px solid var(--header-borde);
+  color: var(--texto-principal);
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.boton-secundario:hover {
+  border-color: var(--raiz-acento);
+}
+
+/* ---------- Formas de nodo ---------- */
+.nodo-forma-rectangulo {
+  border-radius: 8px;
+}
+
+.nodo-forma-redondeado {
+  border-radius: 22px;
+}
+
+.nodo-forma-ovalo {
+  border-radius: 50%;
+  padding: 18px 22px;
+  text-align: center;
+}
+
+.nodo-boton-forma {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.nodo-boton-forma:hover {
+  background: rgba(74, 144, 226, 0.08);
+}
+
+/* ---------- Emoji / icono ---------- */
+.nodo-boton-emoji {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.nodo-boton-emoji:hover {
+  background: rgba(74, 144, 226, 0.08);
+}
+
+.nodo-emoji-panel {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  background: #ffffff;
+  border: 1px solid var(--header-borde);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  z-index: 30;
+}
+
+.nodo-emoji-opcion {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.nodo-emoji-opcion:hover {
+  background: #f1f4f8;
+}
+
+/* ---------- Vista de esquema ---------- */
+.esquema-contenedor {
+  padding: 24px 32px;
+  overflow-y: auto;
+  height: 100%;
+  background: #ffffff;
+}
+
+.esquema-item {
+  margin-top: 4px;
+}
+
+.esquema-linea {
+  border-left: 3px solid;
+  padding-left: 10px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.esquema-texto {
+  font-size: 0.95rem;
+  cursor: text;
+}
+
+.esquema-input {
+  font-size: 0.95rem;
+  font-family: var(--fuente-cuerpo);
+  border: 1px solid var(--raiz-acento);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
