@@ -217,10 +217,6 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setNodes((nds) => {
       const padre = nds.find((n) => n.id === padreId);
       if (!padre) return nds;
-  const agregarHijo = useCallback((padreId) => {
-    setNodes((nds) => {
-      const padre = nds.find((n) => n.id === padreId);
-      if (!padre) return nds;
 
       const hijosDelPadre = nds.filter((n) => n.data.padreId === padreId).length;
       const nuevaPos = { x: padre.position.x + padre.width + 50, y: padre.position.y + hijosDelPadre * 60 };
