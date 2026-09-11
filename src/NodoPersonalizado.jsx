@@ -11,10 +11,14 @@ function NodoPersonalizado({ id, data }) {
   const [link, setLink] = useState(data.hipervinculo || '');
   const [editandoNotas, setEditandoNotas] = useState(false);
   const [notas, setNotas] = useState(data.notas || '');
+  const [editandoNotas, setEditandoNotas] = useState(false);
+  const [notas, setNotas] = useState(data.notas || '');
   const [subiendoImagen, setSubiendoImagen] = useState(false);
+  const [mostrarEmojis, setMostrarEmojis] = useState(false);
   const [mostrarEmojis, setMostrarEmojis] = useState(false);
   const inputRef = useRef(null);
   const linkInputRef = useRef(null);
+  const notasInputRef = useRef(null);
   const notasInputRef = useRef(null);
   const archivoInputRef = useRef(null);
 
@@ -116,6 +120,13 @@ function NodoPersonalizado({ id, data }) {
           </span>
         )}
 
+        {!soloLectura && (
+          <div className="nodo-acciones">
+            {data.hipervinculo && !editandoLink && (
+              <a href={data.hipervinculo} target="_blank" rel="noopener noreferrer" className="nodo-link-icono" title={data.hipervinculo} onClick={(e) => e.stopPropagation()}>
+                🔗
+              </a>
+            )}
         {!soloLectura && (
           <div className="nodo-acciones">
             {data.hipervinculo && !editandoLink && (
