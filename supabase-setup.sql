@@ -8,6 +8,7 @@ create table if not exists nodos (
   padre_id text references nodos(id) on delete cascade,
   posicion_x float not null default 0,
   posicion_y float not null default 0,
+  ancho float not null default 260,
   created_at timestamp with time zone default now()
 );
 

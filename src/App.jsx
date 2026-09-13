@@ -15,13 +15,65 @@ import { supabase } from './supabaseClient';
 import './styles.css';
 
 const nodeTypes = { nodoPersonalizado: NodoPersonalizado };
+const EMOJIS_RAPIDOS = ['📌', '✅', '⚠️', '⭐', '🔥', '🏷️', '🔖', '📎', '💡', '🚧'];
 
 const PALETA_RAMAS = ['#e0559a', '#f5a442', '#e0c93f', '#2fa88f', '#8e6fd1', '#4a90e2', '#e0554f'];
 const COLOR_RAIZ = '#334155';
+const ANCHO_POR_DEFECTO = 260;
+const ANCHO_MINIMO = 120;
+
+function obtenerAnchoNodo(nodo) {
+  const ancho = Number(nodo?.width ?? nodo?.data?.ancho ?? ANCHO_POR_DEFECTO);
+  if (!Number.isFinite(ancho) || ancho < ANCHO_MINIMO) {
+    return ANCHO_POR_DEFECTO;
+  }
+  return ancho;
+}
 
 function obtenerParametrosURL() {
   const params = new URLSearchParams(window.location.search);
   return { mapaId: params.get('mapa'), soloLectura: params.get('solo') === '1' };
+}
+
+function calcularNivelNodo(id, nodos, cache = new Map()) {
+  if (cache.has(id)) return cache.get(id);
+
+  const nodo = nodos.find((n) => n.id === id);
+  if (!nodo || !nodo.data?.padreId) {
+    cache.set(id, 0);
+    return 0;
+  }
+
+  const padre = nodos.find((n) => n.id === nodo.data.padreId);
+  if (!padre) {
+    cache.set(id, 0);
+    return 0;
+  }
+
+  const nivelPadre = calcularNivelNodo(padre.id, nodos, cache);
+  const nivel = nivelPadre + 1;
+  cache.set(id, nivel);
+  return nivel;
+}
+
+function normalizarNodos(nodos) {
+  const cache = new Map();
+  return nodos.map((nodo) => {
+    const ancho = obtenerAnchoNodo(nodo);
+    return {
+      ...nodo,
+      width: ancho,
+      style: {
+        ...nodo.style,
+        width: ancho,
+      },
+      data: {
+        ...nodo.data,
+        ancho,
+        nivel: calcularNivelNodo(nodo.id, nodos, cache),
+      },
+    };
+  });
 }
 
 export default function App() {
@@ -35,15 +87,21 @@ export default function App() {
 }
 
 function EditorDeMapa({ mapaIdInicial, soloLectura }) {
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
+  const [nodos, setNodos] = useState([]);
   const [colapsados, setColapsados] = useState(new Set());
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [vista, setVista] = useState('mapa'); // 'mapa' | 'esquema'
   const [exportando, setExportando] = useState(false);
+  const [selectedNodeIds, setSelectedNodeIds] = useState([]);
+  const [mostrarEmojiBarra, setMostrarEmojiBarra] = useState(false);
+  const [mostrarEditorLink, setMostrarEditorLink] = useState(false);
+  const [mostrarEditorNotas, setMostrarEditorNotas] = useState(false);
+  const [linkBarra, setLinkBarra] = useState('');
+  const [notasBarra, setNotasBarra] = useState('');
   const mapaId = useRef(mapaIdInicial);
   const lienzoRef = useRef(null);
+  const archivoBarraRef = useRef(null);
 
   const guardarNodoEnDB = useCallback(async (nodo, padreId) => {
     if (soloLectura) return;
@@ -56,6 +114,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
       padre_id: padreId || null,
       posicion_x: nodo.position.x,
       posicion_y: nodo.position.y,
+      ancho: obtenerAnchoNodo(nodo),
       color: nodo.data.color || null,
       imagen_url: nodo.data.imagenUrl || null,
       notas: nodo.data.notas || null,
@@ -67,64 +126,67 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
 
   const eliminarNodoEnDB = useCallback(async (id) => {
     setGuardando(true);
+    await supabase.from('nodos').update({ padre_id: null }).eq('padre_id', id);
     await supabase.from('nodos').delete().eq('id', id);
     setGuardando(false);
   }, []);
 
+  const abrirEdicionTitulo = useCallback((id) => {
+    setNodos((nds) => nds.map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        editando: n.id === id,
+      },
+    })));
+  }, []);
+
+  const cerrarEdicionTitulo = useCallback((id) => {
+    setNodos((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, editando: false } } : n)));
+  }, []);
+
   const cambiarTexto = useCallback((id, nuevoTexto) => {
-    setNodes((nds) => {
-      const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, texto: nuevoTexto } } : n));
+    setNodos((nds) => {
+      const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, texto: nuevoTexto, editando: false } } : n));
       const nodo = actualizados.find((n) => n.id === id);
-      setEdges((eds) => {
-        const edge = eds.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
-        return eds;
-      });
-      return actualizados;
+      const padreId = nodo?.data?.padreId || null;
+      guardarNodoEnDB(nodo, padreId);
+      return normalizarNodos(actualizados);
     });
   }, [guardarNodoEnDB]);
 
   const cambiarLink = useCallback((id, nuevoLink) => {
-    setNodes((nds) => {
+    setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, hipervinculo: nuevoLink } } : n));
       const nodo = actualizados.find((n) => n.id === id);
-      setEdges((eds) => {
-        const edge = eds.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
-        return eds;
-      });
-      return actualizados;
+      const padreId = nodo?.data?.padreId || null;
+      guardarNodoEnDB(nodo, padreId);
+      return normalizarNodos(actualizados);
     });
   }, [guardarNodoEnDB]);
 
   const cambiarImagen = useCallback((id, nuevaImagenUrl) => {
-    setNodes((nds) => {
+    setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, imagenUrl: nuevaImagenUrl } } : n));
       const nodo = actualizados.find((n) => n.id === id);
-      setEdges((eds) => {
-        const edge = eds.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
-        return eds;
-      });
-      return actualizados;
+      const padreId = nodo?.data?.padreId || null;
+      guardarNodoEnDB(nodo, padreId);
+      return normalizarNodos(actualizados);
     });
   }, [guardarNodoEnDB]);
 
   const cambiarNotas = useCallback((id, nuevasNotas) => {
-    setNodes((nds) => {
+    setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, notas: nuevasNotas } } : n));
       const nodo = actualizados.find((n) => n.id === id);
-      setEdges((eds) => {
-        const edge = eds.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
-        return eds;
-      });
-      return actualizados;
+      const padreId = nodo?.data?.padreId || null;
+      guardarNodoEnDB(nodo, padreId);
+      return normalizarNodos(actualizados);
     });
   }, [guardarNodoEnDB]);
 
   const cambiarForma = useCallback((id) => {
-    setNodes((nds) => {
+    setNodos((nds) => {
       const actualizados = nds.map((n) => {
         if (n.id !== id) return n;
         const formas = ['rectangulo', 'redondeado', 'ovalo'];
@@ -133,46 +195,30 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
         return { ...n, data: { ...n.data, forma: siguiente } };
       });
       const nodo = actualizados.find((n) => n.id === id);
-      setEdges((eds) => {
-        const edge = eds.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
-        return eds;
-      });
-      return actualizados;
+      const padreId = nodo?.data?.padreId || null;
+      guardarNodoEnDB(nodo, padreId);
+      return normalizarNodos(actualizados);
     });
   }, [guardarNodoEnDB]);
 
   const cambiarIcono = useCallback((id, nuevoIcono) => {
-    setNodes((nds) => {
+    setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, icono: nuevoIcono } } : n));
       const nodo = actualizados.find((n) => n.id === id);
-      setEdges((eds) => {
-        const edge = eds.find((e) => e.target === id);
-        guardarNodoEnDB(nodo, edge ? edge.source : null);
-        return eds;
-      });
-      return actualizados;
+      const padreId = nodo?.data?.padreId || null;
+      guardarNodoEnDB(nodo, padreId);
+      return normalizarNodos(actualizados);
     });
   }, [guardarNodoEnDB]);
 
   const eliminarNodo = useCallback((id) => {
-    setNodes((nds) => {
-      let idsAEliminar = new Set([id]);
-      setEdges((eds) => {
-        let cambiado = true;
-        while (cambiado) {
-          cambiado = false;
-          eds.forEach((e) => {
-            if (idsAEliminar.has(e.source) && !idsAEliminar.has(e.target)) {
-              idsAEliminar.add(e.target);
-              cambiado = true;
-            }
-          });
-        }
-        idsAEliminar.forEach((idBorrar) => eliminarNodoEnDB(idBorrar));
-        return eds.filter((e) => !idsAEliminar.has(e.source) && !idsAEliminar.has(e.target));
-      });
-      return nds.filter((n) => !idsAEliminar.has(n.id));
+    setNodos((nds) => {
+      const nodosActualizados = nds
+        .filter((n) => n.id !== id)
+        .map((n) => (n.data.padreId === id ? { ...n, data: { ...n.data, padreId: null } } : n));
+
+      eliminarNodoEnDB(id);
+      return normalizarNodos(nodosActualizados);
     });
   }, [eliminarNodoEnDB]);
 
@@ -185,10 +231,39 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, []);
 
+  const actualizarAnchoNodo = useCallback((id, ancho, nuevaX) => {
+    setNodos((nds) => {
+      const actualizados = nds.map((n) => {
+        if (n.id !== id) return n;
+        const siguienteAncho = Math.max(ANCHO_MINIMO, Number(ancho) || ANCHO_POR_DEFECTO);
+        const nuevaPosicion = nuevaX !== undefined ? { ...n.position, x: nuevaX } : n.position;
+        return {
+          ...n,
+          width: siguienteAncho,
+          position: nuevaPosicion,
+          style: { ...n.style, width: siguienteAncho },
+          data: {
+            ...n.data,
+            ancho: siguienteAncho,
+          },
+        };
+      });
+      const nodo = actualizados.find((n) => n.id === id);
+      if (nodo) {
+        guardarNodoEnDB(nodo, nodo.data.padreId || null);
+      }
+      return normalizarNodos(actualizados);
+    });
+  }, [guardarNodoEnDB]);
+
   const crearNodo = useCallback((padreId, texto, posicion, esRaiz = false, color = COLOR_RAIZ) => ({
     id: nanoid(8),
     type: 'nodoPersonalizado',
     position: posicion,
+    width: ANCHO_POR_DEFECTO,
+    height: 56,
+    style: { width: ANCHO_POR_DEFECTO },
+    resizable: true,
     data: {
       padreId,
       texto,
@@ -199,7 +274,9 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
       icono: '',
       esRaiz,
       color,
+      ancho: ANCHO_POR_DEFECTO,
       soloLectura,
+      editando: false,
       onCambiarTexto: cambiarTexto,
       onCambiarLink: cambiarLink,
       onCambiarImagen: cambiarImagen,
@@ -208,41 +285,41 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
       onCambiarIcono: cambiarIcono,
       onEliminar: eliminarNodo,
       onAgregarHijo: null,
+      onEditarTitulo: abrirEdicionTitulo,
+      onCerrarEdicionTitulo: cerrarEdicionTitulo,
+      onRedimensionar: actualizarAnchoNodo,
     },
-  }), [soloLectura, cambiarTexto, cambiarLink, cambiarImagen, cambiarNotas, cambiarForma, cambiarIcono, eliminarNodo]);
+  }), [soloLectura, cambiarTexto, cambiarLink, cambiarImagen, cambiarNotas, cambiarForma, cambiarIcono, eliminarNodo, abrirEdicionTitulo, cerrarEdicionTitulo, actualizarAnchoNodo]);
 
   const agregarHijoRef = useRef();
 
   const agregarHijo = useCallback((padreId) => {
-    setNodes((nds) => {
+    setNodos((nds) => {
       const padre = nds.find((n) => n.id === padreId);
       if (!padre) return nds;
 
+      const anchoPadre = obtenerAnchoNodo(padre);
       const hijosDelPadre = nds.filter((n) => n.data.padreId === padreId).length;
-      const nuevaPos = { x: padre.position.x + padre.width + 50, y: padre.position.y + hijosDelPadre * 60 };
+      const nivelPadre = calcularNivelNodo(padreId, nds);
+
+      const nuevaPos = {
+        x: padre.position.x + anchoPadre + 50,
+        y: padre.position.y - 100 + hijosDelPadre * (nivelPadre >= 1 ? 40 : 60),
+      };
       const colorAsignado = padre.data.esRaiz
         ? PALETA_RAMAS[hijosDelPadre % PALETA_RAMAS.length]
         : padre.data.color;
 
       const nuevoNodo = crearNodo(padreId, 'Nuevo nodo', nuevaPos, false, colorAsignado);
       nuevoNodo.data.onAgregarHijo = agregarHijoRef.current;
+      nuevoNodo.data.onRedimensionar = null;
 
-      setEdges((eds) => [
-        ...eds,
-        {
-          id: `e-${padreId}-${nuevoNodo.id}`,
-          source: padreId,
-          target: nuevoNodo.id,
-          type: 'smoothstep',
-          style: { stroke: colorAsignado, strokeWidth: 2 },
-        },
-      ]);
-
+      const proximo = normalizarNodos([...nds, nuevoNodo]);
       guardarNodoEnDB(nuevoNodo, padreId);
 
-      return [...nds, nuevoNodo];
+      return proximo;
     });
-  }, [edges, crearNodo, guardarNodoEnDB]);
+  }, [crearNodo, guardarNodoEnDB]);
 
   useEffect(() => {
     agregarHijoRef.current = agregarHijo;
@@ -262,49 +339,54 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
       if (!data || data.length === 0) {
         const raiz = crearNodo('', 'Tema central', { x: 50, y: 200 }, true, COLOR_RAIZ);
         raiz.data.onAgregarHijo = (id) => agregarHijoRef.current(id);
-        setNodes([raiz]);
+        raiz.data.onRedimensionar = null;
+        raiz.resizable = true;
+        setNodos(normalizarNodos([raiz]));
         guardarNodoEnDB(raiz, null);
         await supabase.from('mapas').upsert(
           { id: mapaId.current, nombre: 'Mapa sin nombre', carpeta: 'Sin carpeta' },
           { onConflict: 'id', ignoreDuplicates: true }
         );
       } else {
-        const nodosCargados = data.map((fila) => ({
-          id: fila.id,
-          type: 'nodoPersonalizado',
-          position: { x: fila.posicion_x, y: fila.posicion_y },
-          data: {
-            texto: fila.texto,
-            hipervinculo: fila.hipervinculo || '',
-            imagenUrl: fila.imagen_url || null,
-            notas: fila.notas || '',
-            forma: fila.forma || 'rectangulo',
-            icono: fila.icono || '',
-            esRaiz: !fila.padre_id,
-            color: fila.color || (!fila.padre_id ? COLOR_RAIZ : '#9fb3c8'),
-            soloLectura,
-            onCambiarTexto: cambiarTexto,
-            onCambiarLink: cambiarLink,
-            onCambiarImagen: cambiarImagen,
-            onCambiarNotas: cambiarNotas,
-            onCambiarForma: cambiarForma,
-            onCambiarIcono: cambiarIcono,
-            onEliminar: eliminarNodo,
-            onAgregarHijo: (id) => agregarHijoRef.current(id),
-          },
+        const nodosCargados = normalizarNodos(data.map((fila) => {
+          const ancho = Number(fila.ancho ?? ANCHO_POR_DEFECTO);
+          return {
+            id: fila.id,
+            type: 'nodoPersonalizado',
+            position: { x: fila.posicion_x, y: fila.posicion_y },
+            width: ancho,
+            height: 56,
+            style: { width: ancho },
+            resizable: true,
+            data: {
+              padreId: fila.padre_id || null,
+              texto: fila.texto,
+              hipervinculo: fila.hipervinculo || '',
+              imagenUrl: fila.imagen_url || null,
+              notas: fila.notas || '',
+              forma: fila.forma || 'rectangulo',
+              icono: fila.icono || '',
+              esRaiz: !fila.padre_id,
+              color: fila.color || (!fila.padre_id ? COLOR_RAIZ : '#9fb3c8'),
+              ancho,
+              soloLectura,
+              editando: false,
+              onCambiarTexto: cambiarTexto,
+              onCambiarLink: cambiarLink,
+              onCambiarImagen: cambiarImagen,
+              onCambiarNotas: cambiarNotas,
+              onCambiarForma: cambiarForma,
+              onCambiarIcono: cambiarIcono,
+              onEliminar: eliminarNodo,
+              onAgregarHijo: (id) => agregarHijoRef.current(id),
+              onEditarTitulo: abrirEdicionTitulo,
+              onCerrarEdicionTitulo: cerrarEdicionTitulo,
+              onRedimensionar: null,
+            },
+          };
         }));
-        const edgesCargados = data
-          .filter((fila) => fila.padre_id)
-          .map((fila) => ({
-            id: `e-${fila.padre_id}-${fila.id}`,
-            source: fila.padre_id,
-            target: fila.id,
-            type: 'smoothstep',
-            style: { stroke: fila.color || '#9fb3c8', strokeWidth: 2 },
-          }));
 
-        setNodes(nodosCargados);
-        setEdges(edgesCargados);
+        setNodos(nodosCargados);
 
         const raizFila = data.find((f) => !f.padre_id);
         await supabase.from('mapas').upsert(
@@ -321,28 +403,92 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
 
   const onNodesChange = useCallback((changes) => {
     if (soloLectura) return;
-    setNodes((nds) => applyNodeChanges(changes, nds));
+    setNodos((nds) => normalizarNodos(applyNodeChanges(changes, nds)));
   }, [soloLectura]);
 
   const onNodeDragStop = useCallback((_, nodo) => {
     if (soloLectura) return;
-    const edge = edges.find((e) => e.target === nodo.id);
-    guardarNodoEnDB(nodo, edge ? edge.source : null);
-  }, [edges, guardarNodoEnDB, soloLectura]);
+    const padreId = nodos.find((n) => n.id === nodo.id)?.data?.padreId || null;
+    guardarNodoEnDB(nodo, padreId);
+  }, [nodos, guardarNodoEnDB, soloLectura]);
 
-  const conteoDescendientes = useMemo(() => {
-    const mapa = {};
-    function contar(id) {
-      if (mapa[id] !== undefined) return mapa[id];
-      const hijos = edges.filter((e) => e.source === id).map((e) => e.target);
-      let total = hijos.length;
-      hijos.forEach((h) => { total += contar(h); });
-      mapa[id] = total;
-      return total;
+  const onNodeResize = useCallback((_, nodo) => {
+    if (soloLectura) return;
+    if (!nodo?.id) return;
+    actualizarAnchoNodo(nodo.id, nodo.width);
+  }, [soloLectura, actualizarAnchoNodo]);
+
+  const nodoSeleccionado = useMemo(
+    () => (selectedNodeIds.length ? nodos.find((n) => n.id === selectedNodeIds[0]) || null : null),
+    [selectedNodeIds, nodos]
+  );
+
+  useEffect(() => {
+    if (!nodoSeleccionado) {
+      setMostrarEmojiBarra(false);
+      setMostrarEditorLink(false);
+      setMostrarEditorNotas(false);
+      return;
     }
-    nodes.forEach((n) => contar(n.id));
-    return mapa;
-  }, [nodes, edges]);
+
+    setLinkBarra(nodoSeleccionado.data.hipervinculo || '');
+    setNotasBarra(nodoSeleccionado.data.notas || '');
+  }, [nodoSeleccionado]);
+
+  const subirImagenDesdeBarra = async (archivo) => {
+    if (!archivo || !nodoSeleccionado) return;
+
+    const extension = archivo.name.split('.').pop();
+    const rutaArchivo = `${nodoSeleccionado.id}-${Date.now()}.${extension}`;
+    const { error } = await supabase.storage.from('imagenes-nodos').upload(rutaArchivo, archivo, { upsert: true });
+
+    if (error) {
+      console.error('Error subiendo imagen:', error);
+      alert('No se pudo subir la imagen. Revisa que el bucket "imagenes-nodos" exista en Supabase.');
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from('imagenes-nodos').getPublicUrl(rutaArchivo);
+    cambiarImagen(nodoSeleccionado.id, urlData.publicUrl);
+  };
+
+  const guardarLinkDesdeBarra = () => {
+    if (!nodoSeleccionado) return;
+    cambiarLink(nodoSeleccionado.id, linkBarra);
+    setMostrarEditorLink(false);
+  };
+
+  const guardarNotasDesdeBarra = () => {
+    if (!nodoSeleccionado) return;
+    cambiarNotas(nodoSeleccionado.id, notasBarra);
+    setMostrarEditorNotas(false);
+  };
+
+  const onSelectionChange = useCallback(({ nodes: seleccionados }) => {
+    setSelectedNodeIds(seleccionados.map((n) => n.id));
+  }, []);
+
+  const onKeyDown = useCallback((event) => {
+    if (soloLectura) return; 
+    if (event.key === 'Delete') {
+      selectedNodeIds.forEach((id) => eliminarNodo(id));
+    }
+  }, [soloLectura, selectedNodeIds, eliminarNodo]);
+
+  const edges = useMemo(
+    () => nodos
+      .filter((n) => n.data.padreId)
+      .map((n) => ({
+        id: `e-${n.data.padreId}-${n.id}`,
+        source: n.data.padreId,
+        target: n.id,
+        type: 'smoothstep',
+        style: { stroke: n.data.color || '#9fb3c8', strokeWidth: 2 },
+      })),
+    [nodos]
+  );
+
+  const numeroHijosDirectos = useCallback((id) => edges.filter((e) => e.source === id).length, [edges]);
 
   const idsOcultos = useMemo(() => {
     const ocultos = new Set();
@@ -359,18 +505,22 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     return ocultos;
   }, [edges, colapsados]);
 
-  const nodosVisibles = useMemo(() => nodes
-    .filter((n) => !idsOcultos.has(n.id))
-    .map((n) => ({
-      ...n,
-      data: {
-        ...n.data,
-        tieneHijos: edges.some((e) => e.source === n.id),
-        colapsado: colapsados.has(n.id),
-        hijosOcultosCount: conteoDescendientes[n.id] || 0,
-        onToggleColapso: toggleColapso,
-      },
-    })), [nodes, edges, idsOcultos, colapsados, conteoDescendientes, toggleColapso]);
+  const nodosVisibles = useMemo(() => {
+    return normalizarNodos(
+      nodos
+        .filter((n) => !idsOcultos.has(n.id))
+        .map((n) => ({
+          ...n,
+          data: {
+            ...n.data,
+            tieneHijos: edges.some((e) => e.source === n.id),
+            colapsado: colapsados.has(n.id),
+            hijosOcultosCount: colapsados.has(n.id) ? numeroHijosDirectos(n.id) : 0,
+            onToggleColapso: toggleColapso,
+          },
+        }))
+    );
+  }, [nodos, edges, idsOcultos, colapsados, numeroHijosDirectos, toggleColapso]);
 
   const edgesVisibles = useMemo(
     () => edges.filter((e) => !idsOcultos.has(e.source) && !idsOcultos.has(e.target)),
@@ -451,7 +601,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
           >
             📋 Esquema
           </button>
-          <span className="contador-nodos">{nodes.length} nodos · sin límite</span>
+          <span className="contador-nodos">{nodos.length} nodos · sin límite</span>
           {!soloLectura && <span className="estado-guardado">{guardando ? 'Guardando…' : 'Guardado ✓'}</span>}
           <button className="boton-secundario" onClick={exportarPNG} disabled={exportando}>
             {exportando ? '…' : '⬇ PNG'}
@@ -474,22 +624,166 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
 
       <div className="app-lienzo">
         {vista === 'mapa' ? (
-          <div ref={lienzoRef} style={{ width: '100%', height: '100%' }}>
-            <ReactFlow
-              nodes={nodosVisibles}
-              edges={edgesVisibles}
-              onNodesChange={onNodesChange}
-              onNodeDragStop={onNodeDragStop}
-              nodeTypes={nodeTypes}
-              nodesDraggable={!soloLectura}
-              fitView
-            >
-              <Controls showInteractive={!soloLectura} />
-              <MiniMap pannable zoomable />
-            </ReactFlow>
-          </div>
+          <>
+            <div className="barra-acciones-nodo">
+              {nodoSeleccionado ? (
+                <>
+                  <button
+                    className="boton-barra-accion"
+                    type="button"
+                    onClick={() => nodoSeleccionado?.data?.onEditarTitulo?.(nodoSeleccionado.id)}
+                  >
+                    ✏️ Título
+                  </button>
+
+                  <div className="barra-accion-grupo barra-accion-emoji">
+                    <button
+                      className="boton-barra-accion"
+                      type="button"
+                      onClick={() => setMostrarEmojiBarra((v) => !v)}
+                    >
+                      ⏺️ Icono
+                    </button>
+                    {mostrarEmojiBarra && (
+                      <div className="barra-emoji-panel">
+                        {EMOJIS_RAPIDOS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            className="barra-emoji-opcion"
+                            onClick={() => {
+                              cambiarIcono(nodoSeleccionado.id, emoji);
+                              setMostrarEmojiBarra(false);
+                            }}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="barra-emoji-opcion quitar"
+                          onClick={() => {
+                            cambiarIcono(nodoSeleccionado.id, '');
+                            setMostrarEmojiBarra(false);
+                          }}
+                        >
+                          ∅
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    className="boton-barra-accion"
+                    type="button"
+                    onClick={() => cambiarForma(nodoSeleccionado.id)}
+                  >
+                    ▱ Forma
+                  </button>
+
+                  <button
+                    className="boton-barra-accion"
+                    type="button"
+                    onClick={() => eliminarNodo(nodoSeleccionado.id)}
+                    style={{ color: '#d94a4a' }}
+                  >
+                    🗑 Eliminar
+                  </button>
+
+                  <input
+                    ref={archivoBarraRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(event) => {
+                      subirImagenDesdeBarra(event.target.files[0]);
+                      event.target.value = '';
+                    }}
+                  />
+                  <button
+                    className="boton-barra-accion"
+                    type="button"
+                    onClick={() => archivoBarraRef.current?.click()}
+                  >
+                    🖼 Imagen
+                  </button>
+
+                  <button
+                    className="boton-barra-accion"
+                    type="button"
+                    onClick={() => {
+                      setMostrarEditorNotas((value) => !value);
+                      setMostrarEditorLink(false);
+                    }}
+                  >
+                    📝 Notas
+                  </button>
+
+                  <button
+                    className="boton-barra-accion"
+                    type="button"
+                    onClick={() => {
+                      setMostrarEditorLink((value) => !value);
+                      setMostrarEditorNotas(false);
+                    }}
+                  >
+                    🔗 Link
+                  </button>
+
+                </>
+              ) : (
+                <span className="barra-acciones-vacia">Selecciona un nodo para editarlo</span>
+              )}
+            </div>
+
+            {mostrarEditorLink && nodoSeleccionado && (
+              <div className="barra-editor"> 
+                <input
+                  className="barra-editor-input"
+                  value={linkBarra}
+                  onChange={(event) => setLinkBarra(event.target.value)}
+                  placeholder="https://..."
+                  autoFocus
+                />
+                <button className="boton-barra-guardar" type="button" onClick={guardarLinkDesdeBarra}>Guardar</button>
+              </div>
+            )}
+
+            {mostrarEditorNotas && nodoSeleccionado && (
+              <div className="barra-editor barra-editor-notas">
+                <textarea
+                  className="barra-editor-textarea"
+                  value={notasBarra}
+                  onChange={(event) => setNotasBarra(event.target.value)}
+                  placeholder="Escribe una nota..."
+                  autoFocus
+                />
+                <button className="boton-barra-guardar" type="button" onClick={guardarNotasDesdeBarra}>Guardar</button>
+              </div>
+            )}
+
+            <div ref={lienzoRef} style={{ width: '100%', height: '100%' }}>
+              <ReactFlow
+                nodes={nodosVisibles}
+                edges={edgesVisibles}
+                onNodesChange={onNodesChange}
+                onSelectionChange={onSelectionChange}
+                onNodeDragStop={onNodeDragStop}
+                onNodeResize={onNodeResize}
+                nodeTypes={nodeTypes}
+                nodesDraggable={!soloLectura}
+                nodesSelectable={!soloLectura}
+                elementsSelectable={!soloLectura}
+                onKeyDown={onKeyDown}
+                fitView
+              >
+                <Controls showInteractive={!soloLectura} />
+                <MiniMap pannable zoomable />
+              </ReactFlow>
+            </div>
+          </>
         ) : (
-          <Esquema nodes={nodes} edges={edges} soloLectura={soloLectura} onCambiarTexto={cambiarTexto} />
+          <Esquema nodes={nodosVisibles} edges={edgesVisibles} soloLectura={soloLectura} onCambiarTexto={cambiarTexto} />
         )}
       </div>
     </div>
