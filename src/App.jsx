@@ -180,6 +180,50 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setGuardando(false);
   }, [soloLectura]);
 
+  // guardarMapaManual: guarda de forma explícita el mapa actual y todos sus nodos en Supabase cuando el usuario pulsa el botón de guardar.
+  const guardarMapaManual = useCallback(async () => {
+    if (soloLectura || !mapaId.current) return;
+    setGuardando(true);
+
+    try {
+      const nombreMapa = nodos.find((n) => n.data.esRaiz)?.data?.texto || 'Mapa sin nombre';
+
+      const { error: errorMapa } = await supabase.from('mapas').upsert({
+        id: mapaId.current,
+        nombre: nombreMapa,
+        carpeta: 'Sin carpeta',
+      }, { onConflict: 'id' });
+
+      if (errorMapa) throw errorMapa;
+
+      const nodosParaGuardar = nodos.map((nodo) => ({
+        id: nodo.id,
+        mapa_id: mapaId.current,
+        texto: nodo.data.texto,
+        hipervinculo: nodo.data.hipervinculo || null,
+        padre_id: nodo.data.padreId || null,
+        posicion_x: nodo.position.x,
+        posicion_y: nodo.position.y,
+        ancho: obtenerAnchoNodo(nodo),
+        color: nodo.data.color || null,
+        imagen_url: nodo.data.imagenUrl || null,
+        notas: nodo.data.notas || null,
+        forma: nodo.data.forma || null,
+        icono: nodo.data.icono || null,
+      }));
+
+      const { error: errorNodos } = await supabase.from('nodos').upsert(nodosParaGuardar, { onConflict: 'id' });
+      if (errorNodos) throw errorNodos;
+
+      alert('Mapa guardado correctamente en Supabase.');
+    } catch (error) {
+      console.error('Error guardando mapa manualmente:', error);
+      alert('No se pudo guardar el mapa en Supabase.');
+    } finally {
+      setGuardando(false);
+    }
+  }, [nodos, soloLectura]);
+
   // Elimina un nodo de la base de datos y reubica primero a sus hijos a nivel raíz antes de borrar el registro.
   const eliminarNodoEnDB = useCallback(async (id) => {
     setGuardando(true);
@@ -701,6 +745,11 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
           </button>
           <span className="contador-nodos">{nodos.length} nodos · sin límite</span>
           {!soloLectura && <span className="estado-guardado">{guardando ? 'Guardando…' : 'Guardado ✓'}</span>}
+          {!soloLectura && (
+            <button className="boton-secundario" onClick={guardarMapaManual} disabled={guardando}>
+              {guardando ? 'Guardando…' : '💾 Guardar'}
+            </button>
+          )}
           <button className="boton-secundario" onClick={exportarPNG} disabled={exportando}>
             {exportando ? '…' : '⬇ PNG'}
           </button>
