@@ -1,14 +1,19 @@
 import { useState } from 'react';
 
+// Este componente renderiza una vista alternativa del mapa en formato jerárquico para revisar la estructura del árbol.
+// Se usa para mostrar una versión esquemática del mapa mental con hijos y niveles definidos.
 function NodoEsquema({ nodo, nodesById, edgesPorPadre, nivel, soloLectura, onCambiarTexto, esRaiz = false }) {
+  // editando: indica si el texto del nodo actual está siendo modificado en modo de edición inline.
   const [editando, setEditando] = useState(false);
   const [texto, setTexto] = useState(nodo.data.texto);
 
+  // Guarda el texto editado del nodo solo si cambió, manteniendo la lógica de sincronización con el estado principal.
   const guardar = () => {
     setEditando(false);
     if (texto !== nodo.data.texto) onCambiarTexto(nodo.id, texto);
   };
 
+  // hijos: identifica los nodos que dependen del nodo actual para construir la jerarquía del esquema.
   const hijos = edgesPorPadre[nodo.id] || [];
   const esTextoLibre = !esRaiz && nivel > 1;
 
@@ -71,10 +76,13 @@ function NodoEsquema({ nodo, nodesById, edgesPorPadre, nivel, soloLectura, onCam
   );
 }
 
+// Este componente prepara los datos del mapa para la vista jerárquica y renderiza la raíz del árbol.
 export default function Esquema({ nodes, edges, soloLectura, onCambiarTexto }) {
+  // nodesById: índice temporal de nodos para acceder a cada uno por id de forma rápida.
   const nodesById = {};
   nodes.forEach((n) => { nodesById[n.id] = n; });
 
+  // edgesPorPadre: reorganiza las conexiones por nodo origen para recorrer la estructura en forma de árbol.
   const edgesPorPadre = {};
   edges.forEach((e) => {
     if (!edgesPorPadre[e.source]) edgesPorPadre[e.source] = [];
@@ -85,6 +93,7 @@ export default function Esquema({ nodes, edges, soloLectura, onCambiarTexto }) {
 
   if (!raiz) return <div className="pantalla-carga">Sin datos</div>;
 
+  // Render del árbol jerárquico: a partir de la raíz y de las conexiones del mapa, se dibuja el esquema completo.
   return (
     <div className="esquema-contenedor">
       <NodoEsquema

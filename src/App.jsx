@@ -3,6 +3,7 @@ import ReactFlow, {
   Controls,
   MiniMap,
   applyNodeChanges,
+  BaseEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { nanoid } from 'nanoid';
@@ -14,14 +15,49 @@ import Esquema from './Esquema';
 import { supabase } from './supabaseClient';
 import './styles.css';
 
+// nodeTypes: registra el componente visual usado para dibujar cada nodo del mapa dentro de React Flow.
 const nodeTypes = { nodoPersonalizado: NodoPersonalizado };
+// edgeTypes: define un trazado personalizado para mantener un margen limpio alrededor del tronco vertical y del botón de colapso.
+const edgeTypes = { mindmapBranch: MindmapBranchEdge };
+// EMOJIS_RAPIDOS: conjunto de iconos disponibles para asignar a un nodo desde la barra de acciones.
 const EMOJIS_RAPIDOS = ['📌', '✅', '⚠️', '⭐', '🔥', '🏷️', '🔖', '📎', '💡', '🚧'];
 
-const PALETA_RAMAS = ['#e0559a', '#f5a442', '#e0c93f', '#2fa88f', '#8e6fd1', '#4a90e2', '#e0554f'];
-const COLOR_RAIZ = '#334155';
-const ANCHO_POR_DEFECTO = 260;
-const ANCHO_MINIMO = 120;
+// MindmapBranchEdge: dibuja un conector con un tramo horizontal corto al salir del padre, un tronco vertical separado y una llegada limpia al hijo.
+// Se mantiene la misma estructura del mapa y los nodos, pero se corrige solo el recorrido de la línea.
+function MindmapBranchEdge({ id, sourceX, sourceY, targetX, targetY, style }) {
+  const margenSalidaPadre = 22;
+  const margenTronco = 38;
+  const tramoHorizontalSalida = sourceX + margenSalidaPadre;
+  const troncoX = sourceX + margenTronco;
+  const tramoHorizontalLlegada = Math.max(targetX - 8, troncoX + 10);
 
+  const path = [
+    `M ${sourceX} ${sourceY}`,
+    `H ${tramoHorizontalSalida}`,
+    `V ${targetY}`,
+    `H ${tramoHorizontalLlegada}`,
+  ].join(' ');
+
+  return <BaseEdge id={id} path={path} style={style} />;
+}
+
+// PALETA_RAMAS: colores reutilizados para diferenciar ramas hijas del nodo raíz.
+const PALETA_RAMAS = ['#e0559a', '#f5a442', '#e0c93f', '#2fa88f', '#8e6fd1', '#4a90e2', '#e0554f'];
+// COLOR_RAIZ: tonalidad base usada por el nodo principal del mapa mental.
+const COLOR_RAIZ = '#334155';
+// ANCHO_POR_DEFECTO: ancho inicial que usa un nodo nuevo cuando todavía no se ha ajustado manualmente.
+// Este valor define el tamaño base del contenido visual del nodo antes de redimensionarlo.
+const ANCHO_POR_DEFECTO = 120;
+// ANCHO_HIJO_DIRECTO: tamaño más pequeño para los nodos que salen directamente del nodo raíz para mantener la jerarquía visual.
+const ANCHO_HIJO_DIRECTO = 120;
+// ANCHO_MINIMO: límite inferior para evitar nodos demasiado estrechos al redimensionar o al cargar datos antiguos.
+const ANCHO_MINIMO = 75;
+// SEPARACION_HORIZONTAL_HIJO: distancia horizontal mínima entre un nodo padre y el hijo que se crea.
+// Se deja en un valor intermedio para acortar la conexión respecto al estado anterior, pero sin dejar las ramas demasiado pegadas ni superpuestas.
+const SEPARACION_HORIZONTAL_HIJO = 40;
+
+// obtenerAnchoNodo: normaliza el tamaño real del nodo para que siempre sea válido y consistente con el ancho visual.
+// Si llega un valor vacío, no numérico o menor al mínimo, se devuelve el ancho por defecto.
 function obtenerAnchoNodo(nodo) {
   const ancho = Number(nodo?.width ?? nodo?.data?.ancho ?? ANCHO_POR_DEFECTO);
   if (!Number.isFinite(ancho) || ancho < ANCHO_MINIMO) {
@@ -30,11 +66,13 @@ function obtenerAnchoNodo(nodo) {
   return ancho;
 }
 
+// Lee los parámetros de la URL para decidir qué mapa abrir y si la vista es de solo lectura.
 function obtenerParametrosURL() {
   const params = new URLSearchParams(window.location.search);
   return { mapaId: params.get('mapa'), soloLectura: params.get('solo') === '1' };
 }
 
+// Calcula la profundidad de un nodo dentro del árbol del mapa mental a partir de su estructura jerárquica.
 function calcularNivelNodo(id, nodos, cache = new Map()) {
   if (cache.has(id)) return cache.get(id);
 
@@ -56,6 +94,7 @@ function calcularNivelNodo(id, nodos, cache = new Map()) {
   return nivel;
 }
 
+// Normaliza la información de cada nodo para mantener propiedades derivadas como ancho y nivel consistentes.
 function normalizarNodos(nodos) {
   const cache = new Map();
   return nodos.map((nodo) => {
@@ -76,6 +115,7 @@ function normalizarNodos(nodos) {
   });
 }
 
+// App: determina si se debe abrir la pantalla de inicio o el editor del mapa según la URL actual.
 export default function App() {
   const { mapaId, soloLectura } = obtenerParametrosURL();
 
@@ -86,23 +126,39 @@ export default function App() {
   return <EditorDeMapa mapaIdInicial={mapaId} soloLectura={soloLectura} />;
 }
 
+// EditorDeMapa: contiene la lógica principal del mapa mental: carga, edición, guardado, vistas y exportaciones.
 function EditorDeMapa({ mapaIdInicial, soloLectura }) {
+  // nodos: estado principal con todos los nodos del mapa y sus datos actuales.
   const [nodos, setNodos] = useState([]);
+  // colapsados: conjunto de ids de nodos ocultos para comprimir ramas del mapa.
   const [colapsados, setColapsados] = useState(new Set());
+  // cargando: indica si todavía se está leyendo el contenido del mapa desde Supabase.
   const [cargando, setCargando] = useState(true);
+  // guardando: refleja si una operación de persistencia está en curso.
   const [guardando, setGuardando] = useState(false);
+  // vista: controla si se muestra el mapa visual o la vista en esquema.
   const [vista, setVista] = useState('mapa'); // 'mapa' | 'esquema'
+  // exportando: bloquea acciones mientras se genera un PNG o PDF del mapa.
   const [exportando, setExportando] = useState(false);
+  // selectedNodeIds: nodos actualmente seleccionados para acciones masivas o de edición.
   const [selectedNodeIds, setSelectedNodeIds] = useState([]);
+  // mostrarEmojiBarra: abre/cierra el panel de iconos rápidos del nodo activo.
   const [mostrarEmojiBarra, setMostrarEmojiBarra] = useState(false);
+  // mostrarEditorLink: muestra el campo para editar el hipervínculo del nodo seleccionado.
   const [mostrarEditorLink, setMostrarEditorLink] = useState(false);
+  // mostrarEditorNotas: activa el editor de notas del nodo seleccionado.
   const [mostrarEditorNotas, setMostrarEditorNotas] = useState(false);
+  // linkBarra y notasBarra mantienen el texto temporal de los editores rápidos.
   const [linkBarra, setLinkBarra] = useState('');
   const [notasBarra, setNotasBarra] = useState('');
+  // mapaId: referencia al identificador actual del mapa abierto para persistencia en Supabase.
   const mapaId = useRef(mapaIdInicial);
+  // lienzoRef: referencia al contenedor del React Flow para exportar la imagen del mapa.
   const lienzoRef = useRef(null);
+  // archivoBarraRef: referencia al input oculto para subir imágenes desde la barra de acciones.
   const archivoBarraRef = useRef(null);
 
+  // Guarda un nodo individual en la tabla nodos de Supabase, incluyendo sus propiedades principales.
   const guardarNodoEnDB = useCallback(async (nodo, padreId) => {
     if (soloLectura) return;
     setGuardando(true);
@@ -124,6 +180,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setGuardando(false);
   }, [soloLectura]);
 
+  // Elimina un nodo de la base de datos y reubica primero a sus hijos a nivel raíz antes de borrar el registro.
   const eliminarNodoEnDB = useCallback(async (id) => {
     setGuardando(true);
     await supabase.from('nodos').update({ padre_id: null }).eq('padre_id', id);
@@ -131,6 +188,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setGuardando(false);
   }, []);
 
+  // Activa el modo de edición del texto del nodo indicado.
   const abrirEdicionTitulo = useCallback((id) => {
     setNodos((nds) => nds.map((n) => ({
       ...n,
@@ -145,6 +203,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setNodos((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, editando: false } } : n)));
   }, []);
 
+  // cambiaTexto: actualiza el texto principal de un nodo y lo sincroniza con la base de datos.
   const cambiarTexto = useCallback((id, nuevoTexto) => {
     setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, texto: nuevoTexto, editando: false } } : n));
@@ -155,6 +214,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [guardarNodoEnDB]);
 
+  // cambiaLink: guarda o limpia el enlace externo asociado al nodo actual.
   const cambiarLink = useCallback((id, nuevoLink) => {
     setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, hipervinculo: nuevoLink } } : n));
@@ -165,6 +225,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [guardarNodoEnDB]);
 
+  // cambiarImagen: asocia una imagen pública a un nodo y la persiste junto con el resto del contenido.
   const cambiarImagen = useCallback((id, nuevaImagenUrl) => {
     setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, imagenUrl: nuevaImagenUrl } } : n));
@@ -175,6 +236,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [guardarNodoEnDB]);
 
+  // cambiarNotas: guarda el contenido adicional del nodo para mostrarlo como detalle textual.
   const cambiarNotas = useCallback((id, nuevasNotas) => {
     setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, notas: nuevasNotas } } : n));
@@ -185,6 +247,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [guardarNodoEnDB]);
 
+  // cambiarForma: alterna entre los estilos visuales disponibles para un nodo: rectángulo, redondeado u oval.
   const cambiarForma = useCallback((id) => {
     setNodos((nds) => {
       const actualizados = nds.map((n) => {
@@ -201,6 +264,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [guardarNodoEnDB]);
 
+  // cambiarIcono: asigna un emoji resumido al nodo para reforzar la identificación visual del tema.
   const cambiarIcono = useCallback((id, nuevoIcono) => {
     setNodos((nds) => {
       const actualizados = nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, icono: nuevoIcono } } : n));
@@ -211,6 +275,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [guardarNodoEnDB]);
 
+  // eliminarNodo: borra el nodo seleccionado y convierte a sus hijos en ramas raíz para no perder la estructura.
   const eliminarNodo = useCallback((id) => {
     setNodos((nds) => {
       const nodosActualizados = nds
@@ -222,6 +287,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [eliminarNodoEnDB]);
 
+  // toggleColapso: alterna la visibilidad de una rama completa para ocultar o expandir subnodos.
   const toggleColapso = useCallback((id) => {
     setColapsados((prev) => {
       const siguiente = new Set(prev);
@@ -231,6 +297,8 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, []);
 
+  // actualizarAnchoNodo: ajusta el tamaño del nodo en tiempo real y guarda el nuevo ancho para que se mantenga al recargar.
+  // El ancho se actualiza en el objeto del nodo, en el style y en data.ancho para que React Flow y el guardado estén sincronizados.
   const actualizarAnchoNodo = useCallback((id, ancho, nuevaX) => {
     setNodos((nds) => {
       const actualizados = nds.map((n) => {
@@ -256,13 +324,16 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [guardarNodoEnDB]);
 
-  const crearNodo = useCallback((padreId, texto, posicion, esRaiz = false, color = COLOR_RAIZ) => ({
+  // crearNodo: fabrica la estructura base de un nodo nuevo con tamaño inicial, callbacks y propiedades visuales.
+  // El ancho del nodo se define aquí para que cada nodo aparezca con un tamaño estándar antes de ser redimensionado por el usuario.
+  // La raíz conserva su tamaño actual, mientras que los hijos directos de la raíz quedan más pequeños para reforzar la jerarquía visual.
+  const crearNodo = useCallback((padreId, texto, posicion, esRaiz = false, color = COLOR_RAIZ, anchoInicial = ANCHO_POR_DEFECTO) => ({
     id: nanoid(8),
     type: 'nodoPersonalizado',
     position: posicion,
-    width: ANCHO_POR_DEFECTO,
+    width: anchoInicial,
     height: 56,
-    style: { width: ANCHO_POR_DEFECTO },
+    style: { width: anchoInicial },
     resizable: true,
     data: {
       padreId,
@@ -274,7 +345,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
       icono: '',
       esRaiz,
       color,
-      ancho: ANCHO_POR_DEFECTO,
+      ancho: anchoInicial,
       soloLectura,
       editando: false,
       onCambiarTexto: cambiarTexto,
@@ -291,8 +362,10 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     },
   }), [soloLectura, cambiarTexto, cambiarLink, cambiarImagen, cambiarNotas, cambiarForma, cambiarIcono, eliminarNodo, abrirEdicionTitulo, cerrarEdicionTitulo, actualizarAnchoNodo]);
 
+  // agregarHijoRef: referencia para invocar la creación de subnodos desde callbacks dentro del árbol.
   const agregarHijoRef = useRef();
 
+  // agregarHijo: crea un nodo hijo conectado a un nodo padre y lo guarda automáticamente.
   const agregarHijo = useCallback((padreId) => {
     setNodos((nds) => {
       const padre = nds.find((n) => n.id === padreId);
@@ -303,14 +376,15 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
       const nivelPadre = calcularNivelNodo(padreId, nds);
 
       const nuevaPos = {
-        x: padre.position.x + anchoPadre + 50,
+        x: padre.position.x + anchoPadre + SEPARACION_HORIZONTAL_HIJO,
         y: padre.position.y - 100 + hijosDelPadre * (nivelPadre >= 1 ? 40 : 60),
       };
       const colorAsignado = padre.data.esRaiz
         ? PALETA_RAMAS[hijosDelPadre % PALETA_RAMAS.length]
         : padre.data.color;
+      const anchoInicial = padre.data.esRaiz ? ANCHO_HIJO_DIRECTO : ANCHO_POR_DEFECTO;
 
-      const nuevoNodo = crearNodo(padreId, 'Nuevo nodo', nuevaPos, false, colorAsignado);
+      const nuevoNodo = crearNodo(padreId, 'Nuevo nodo', nuevaPos, false, colorAsignado, anchoInicial);
       nuevoNodo.data.onAgregarHijo = agregarHijoRef.current;
       nuevoNodo.data.onRedimensionar = null;
 
@@ -321,10 +395,12 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     });
   }, [crearNodo, guardarNodoEnDB]);
 
+  // Mantiene la referencia a agregarHijo actualizada para que otros componentes puedan invocarla sin depender del estado previo.
   useEffect(() => {
     agregarHijoRef.current = agregarHijo;
   }, [agregarHijo]);
 
+  // cargarMapa: lee el contenido del mapa desde Supabase y crea la raíz si no existía aún.
   useEffect(() => {
     async function cargarMapa() {
       setCargando(true);
@@ -401,28 +477,33 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // onNodesChange: actualiza la posición y configuración de nodos del mapa al interactuar con React Flow.
   const onNodesChange = useCallback((changes) => {
     if (soloLectura) return;
     setNodos((nds) => normalizarNodos(applyNodeChanges(changes, nds)));
   }, [soloLectura]);
 
+  // onNodeDragStop: guarda la posición final del nodo al soltarlo en el lienzo.
   const onNodeDragStop = useCallback((_, nodo) => {
     if (soloLectura) return;
     const padreId = nodos.find((n) => n.id === nodo.id)?.data?.padreId || null;
     guardarNodoEnDB(nodo, padreId);
   }, [nodos, guardarNodoEnDB, soloLectura]);
 
+  // onNodeResize: mantiene el ancho del nodo al redimensionarlo en la interfaz visual.
   const onNodeResize = useCallback((_, nodo) => {
     if (soloLectura) return;
     if (!nodo?.id) return;
     actualizarAnchoNodo(nodo.id, nodo.width);
   }, [soloLectura, actualizarAnchoNodo]);
 
+  // nodoSeleccionado: obtiene el nodo activo para mostrar sus acciones y campos de edición.
   const nodoSeleccionado = useMemo(
     () => (selectedNodeIds.length ? nodos.find((n) => n.id === selectedNodeIds[0]) || null : null),
     [selectedNodeIds, nodos]
   );
 
+  // Sincroniza los campos temporales de enlace y notas con el nodo seleccionado para editarlo sin perder el contenido previo.
   useEffect(() => {
     if (!nodoSeleccionado) {
       setMostrarEmojiBarra(false);
@@ -435,6 +516,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setNotasBarra(nodoSeleccionado.data.notas || '');
   }, [nodoSeleccionado]);
 
+  // subirImagenDesdeBarra: carga una imagen desde el navegador y la almacena en el bucket de Supabase asociado al nodo.
   const subirImagenDesdeBarra = async (archivo) => {
     if (!archivo || !nodoSeleccionado) return;
 
@@ -452,22 +534,26 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     cambiarImagen(nodoSeleccionado.id, urlData.publicUrl);
   };
 
+  // guardarLinkDesdeBarra: persiste el hipervínculo editado del nodo activo.
   const guardarLinkDesdeBarra = () => {
     if (!nodoSeleccionado) return;
     cambiarLink(nodoSeleccionado.id, linkBarra);
     setMostrarEditorLink(false);
   };
 
+  // guardarNotasDesdeBarra: guarda el texto adicional del nodo y oculta el editor rápido.
   const guardarNotasDesdeBarra = () => {
     if (!nodoSeleccionado) return;
     cambiarNotas(nodoSeleccionado.id, notasBarra);
     setMostrarEditorNotas(false);
   };
 
+  // onSelectionChange: mantiene el listado de nodos seleccionados para acciones rápidas del teclado.
   const onSelectionChange = useCallback(({ nodes: seleccionados }) => {
     setSelectedNodeIds(seleccionados.map((n) => n.id));
   }, []);
 
+  // onKeyDown: permite borrar nodos seleccionados con la tecla Delete, salvo que el mapa sea de solo lectura.
   const onKeyDown = useCallback((event) => {
     if (soloLectura) return; 
     if (event.key === 'Delete') {
@@ -475,6 +561,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     }
   }, [soloLectura, selectedNodeIds, eliminarNodo]);
 
+  // edges: genera las conexiones visuales del árbol a partir de la relación padre-hijo de cada nodo.
   const edges = useMemo(
     () => nodos
       .filter((n) => n.data.padreId)
@@ -482,14 +569,16 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
         id: `e-${n.data.padreId}-${n.id}`,
         source: n.data.padreId,
         target: n.id,
-        type: 'smoothstep',
-        style: { stroke: n.data.color || '#9fb3c8', strokeWidth: 2 },
+        type: 'mindmapBranch',
+        style: { stroke: n.data.color || '#9fb3c8', strokeWidth: 2, fill: 'none' },
       })),
     [nodos]
   );
 
+  // numeroHijosDirectos: cuenta cuántos subnodos tiene directamente una rama para mostrar la cantidad ocultada al colapsar.
   const numeroHijosDirectos = useCallback((id) => edges.filter((e) => e.source === id).length, [edges]);
 
+  // idsOcultos: mantiene el conjunto de nodos que deben permanecer ocultos cuando una rama está colapsada.
   const idsOcultos = useMemo(() => {
     const ocultos = new Set();
     colapsados.forEach((id) => {
@@ -505,6 +594,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     return ocultos;
   }, [edges, colapsados]);
 
+  // nodosVisibles: devuelve la estructura final que se renderiza en el lienzo, con relaciones de colapso y visibilidad aplicadas.
   const nodosVisibles = useMemo(() => {
     return normalizarNodos(
       nodos
@@ -522,16 +612,19 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     );
   }, [nodos, edges, idsOcultos, colapsados, numeroHijosDirectos, toggleColapso]);
 
+  // edgesVisibles: filtra únicamente las conexiones que no pertenecen a ramas ocultas en el momento.
   const edgesVisibles = useMemo(
     () => edges.filter((e) => !idsOcultos.has(e.source) && !idsOcultos.has(e.target)),
     [edges, idsOcultos]
   );
 
+  // copia un enlace de edición compartible del mapa actual para que otra persona pueda abrirlo.
   const copiarEnlaceCompartible = () => {
     navigator.clipboard.writeText(window.location.href.replace(/&solo=1/, ''));
     alert('¡Enlace copiado! (con permiso de edición)');
   };
 
+  // copiarEnlaceSoloLectura: genera una URL con el parámetro solo=1 para compartir la vista no editable del mapa.
   const copiarEnlaceSoloLectura = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('solo', '1');
@@ -539,6 +632,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     alert('¡Enlace de solo lectura copiado! Quien lo abra podrá ver pero no editar.');
   };
 
+  // exportarPNG: convierte el contenido visible del lienzo en una imagen PNG descargable.
   const exportarPNG = async () => {
     if (!lienzoRef.current) return;
     setExportando(true);
@@ -555,6 +649,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setExportando(false);
   };
 
+  // exportarPDF: genera un archivo PDF a partir del mapa visible, manteniendo la resolución de la imagen exportada.
   const exportarPDF = async () => {
     if (!lienzoRef.current) return;
     setExportando(true);
@@ -577,13 +672,16 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
     setExportando(false);
   };
 
+  // Si todavía no se ha cargado el contenido del mapa desde Supabase, se muestra una pantalla temporal de carga.
   if (cargando) {
     return <div className="pantalla-carga">Cargando tu mapa mental…</div>;
   }
 
+  // Render principal de la aplicación: cabecera con acciones globales, barra de edición del nodo seleccionado y lienzo del mapa.
   return (
     <div className="app-contenedor">
       <header className="app-header">
+        {/* Cabecera superior: navegación general, indicador del modo actual y acciones de exportación y compartir. */}
         <div className="app-header-izquierda">
           <a href={window.location.pathname} className="boton-volver" title="Volver a mis mapas">← Mis mapas</a>
           <h1>Mapa Mental{soloLectura ? ' (solo lectura)' : ''}</h1>
@@ -623,8 +721,10 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
       </header>
 
       <div className="app-lienzo">
+        {/* Vista activa del mapa: puede mostrarse como tablero visual o como esquema jerárquico. */}
         {vista === 'mapa' ? (
           <>
+            {/* Barra contextual de acciones del nodo activo: editar, cambiar forma, enlazar, añadir notas, imagen o eliminar. */}
             <div className="barra-acciones-nodo">
               {nodoSeleccionado ? (
                 <>
@@ -736,6 +836,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
               )}
             </div>
 
+            {/* Editor rápido para añadir o actualizar el hipervínculo del nodo seleccionado. */}
             {mostrarEditorLink && nodoSeleccionado && (
               <div className="barra-editor"> 
                 <input
@@ -749,6 +850,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
               </div>
             )}
 
+            {/* Editor rápido para anotar detalles adicionales del nodo seleccionado. */}
             {mostrarEditorNotas && nodoSeleccionado && (
               <div className="barra-editor barra-editor-notas">
                 <textarea
@@ -762,6 +864,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
               </div>
             )}
 
+            {/* Contenedor del lienzo visual donde React Flow dibuja los nodos, sus conexiones y los controles del mapa. */}
             <div ref={lienzoRef} style={{ width: '100%', height: '100%' }}>
               <ReactFlow
                 nodes={nodosVisibles}
@@ -771,6 +874,7 @@ function EditorDeMapa({ mapaIdInicial, soloLectura }) {
                 onNodeDragStop={onNodeDragStop}
                 onNodeResize={onNodeResize}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 nodesDraggable={!soloLectura}
                 nodesSelectable={!soloLectura}
                 elementsSelectable={!soloLectura}

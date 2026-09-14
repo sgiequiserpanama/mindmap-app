@@ -3,17 +3,22 @@ import { nanoid } from 'nanoid';
 import { supabase } from './supabaseClient';
 import './styles.css';
 
+// Este componente sirve como pantalla inicial para listar, crear y eliminar mapas mentales.
+// Se encarga de cargar los proyectos desde Supabase y redirigir al editor de cada mapa.
 export default function Home() {
+  // mapas: almacena la lista de mapas recuperados desde la base de datos.
   const [mapas, setMapas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [nombreNuevo, setNombreNuevo] = useState('');
   const [carpetaNueva, setCarpetaNueva] = useState('');
   const [creando, setCreando] = useState(false);
 
+  // Este efecto ejecuta la carga inicial de mapas cuando se monta la pantalla de inicio.
   useEffect(() => {
     cargarMapas();
   }, []);
 
+  // Carga todos los mapas del usuario ordenados por fecha de creación para mostrarlos agrupados por carpeta.
   async function cargarMapas() {
     setCargando(true);
     const { data, error } = await supabase
@@ -29,6 +34,7 @@ export default function Home() {
     setCargando(false);
   }
 
+  // Crea un nuevo mapa con un nombre y una carpeta opcional, y redirige al editor del mapa recién creado.
   async function crearMapa(e) {
     e.preventDefault();
     if (!nombreNuevo.trim()) return;
@@ -54,6 +60,7 @@ export default function Home() {
     window.location.href = `${window.location.pathname}?mapa=${nuevoId}`;
   }
 
+  // Elimina un mapa y todos sus nodos asociados tras confirmar la acción en el navegador.
   async function eliminarMapa(id) {
     if (!confirm('¿Eliminar este mapa y todos sus nodos? Esta acción no se puede deshacer.')) return;
     await supabase.from('nodos').delete().eq('mapa_id', id);
@@ -61,11 +68,12 @@ export default function Home() {
     cargarMapas();
   }
 
+  // Navega al editor del mapa indicado usando el identificador del mapa en la URL.
   function abrirMapa(id) {
     window.location.href = `${window.location.pathname}?mapa=${id}`;
   }
 
-  // Agrupar mapas por carpeta
+  // Agrupa los mapas por carpeta para mostrar la pantalla de inicio ordenada y fácil de navegar.
   const carpetas = {};
   mapas.forEach((m) => {
     const nombreCarpeta = m.carpeta || 'Sin carpeta';
@@ -75,6 +83,7 @@ export default function Home() {
 
   const carpetasExistentes = Object.keys(carpetas).sort();
 
+  // Render principal de la pantalla de inicio: cabecera general, formulario de creación y listado agrupado por carpetas.
   return (
     <div className="home-contenedor">
       <header className="app-header">
@@ -82,6 +91,7 @@ export default function Home() {
       </header>
 
       <div className="home-contenido">
+        {/* Formulario para crear un mapa nuevo con nombre y carpeta opcional. */}
         <form className="home-form-nuevo" onSubmit={crearMapa}>
           <input
             type="text"

@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { Handle, Position, NodeResizer } from 'reactflow';
 
+// Este componente dibuja cada nodo del mapa mental con sus acciones, color, imagen, notas e hipervínculo.
+// Se integra con React Flow para que cada elemento del árbol se comporte como un nodo redimensionable.
 function NodoPersonalizado({ id, data }) {
+  // editando: controla si el título del nodo está visible como campo de edición inline.
   const [editando, setEditando] = useState(Boolean(data.editando));
   const [texto, setTexto] = useState(data.texto);
   const inputRef = useRef(null);
@@ -18,38 +21,48 @@ function NodoPersonalizado({ id, data }) {
     }
   }, [editando]);
 
+  // Guarda el título del nodo cuando el usuario termina de editarlo y notifica al componente padre.
   const guardarTexto = () => {
     setEditando(false);
     if (data.onCerrarEdicionTitulo) data.onCerrarEdicionTitulo(id);
     if (texto !== data.texto) data.onCambiarTexto(id, texto);
   };
 
+  // colorRama: define el color visual del nodo y sus conexiones en función del árbol o del padre.
+  // colorRama: define el color del borde y la identidad visual del nodo; también se usa en los controles de colapso.
   const colorRama = data.color || '#9fb3c8';
+  // forma: determina la geometría del nodo para alternar entre rectángulo, redondeado y ovalado.
   const forma = data.forma || 'rectangulo';
+  // nivel: indica la profundidad del nodo dentro del árbol; a partir del nivel 2 se elimina el marco para un estilo más ligero.
   const nivel = Number(data.nivel ?? 0);
   const sinMarco = nivel >= 2;
 
   const claseForma =
     forma === 'ovalo' ? 'nodo-forma-ovalo' : forma === 'redondeado' ? 'nodo-forma-redondeado' : 'nodo-forma-rectangulo';
 
-  const anchoNodo = Number(data.ancho ?? 260);
+  const claseNodo = [
+    'nodo-mapa',
+    claseForma,
+    sinMarco ? 'nodo-sin-marco' : '',
+    data.esRaiz ? 'nodo-raiz' : '',
+  ].filter(Boolean).join(' ');
+  
   const estiloNodo = {
-    borderColor: colorRama,
-    borderWidth: 1.5,
-    width: `${Math.max(120, anchoNodo)}px`,
-    minWidth: '120px',
-    maxWidth: 'none',
+    '--nodo-color': colorRama,
+    '--nodo-ancho': `${Number(data.ancho ?? 0)}px`,
   };
-  const estiloTexto = data.esRaiz ? { color: colorRama, fontWeight: 600 } : {};
 
+  const estiloTexto = data.esRaiz ? { color: 'var(--nodo-color)' } : {};
+
+  // Render del nodo visual: se dibuja el contenido, las acciones rápidas y los conectores de React Flow.
   return (
-    <div className={`nodo-mapa ${claseForma} ${sinMarco ? 'nodo-sin-marco' : ''}`} style={estiloNodo}>
+    <div className={claseNodo} style={estiloNodo}>
       {!soloLectura && (
         <NodeResizer
           minWidth={120}
           minHeight={42}
           handleStyle={{ width: 8, height: 8, borderRadius: 4, background: '#fff', border: '1px solid #cbd5e1' }}
-          lineStyle={{ borderColor: colorRama, borderStyle: 'dashed' }}
+          lineStyle={{ borderColor: 'transparent', borderStyle: 'solid' }}
           isVisible
         />
       )}

@@ -1,4 +1,5 @@
--- Ejecuta esto en el "SQL Editor" de tu proyecto Supabase (una sola vez)
+-- Este script crea la estructura base de datos para guardar los nodos y la relación jerárquica del mapa mental en Supabase.
+-- Debe ejecutarse una sola vez desde el SQL Editor del proyecto de Supabase.
 
 create table if not exists nodos (
   id text primary key,
@@ -12,9 +13,10 @@ create table if not exists nodos (
   created_at timestamp with time zone default now()
 );
 
+-- idx_nodos_mapa_id: acelera las consultas por mapa para cargar el árbol y localizar los nodos asociados rápidamente.
 create index if not exists idx_nodos_mapa_id on nodos(mapa_id);
 
--- Habilita seguridad a nivel de fila
+-- Habilita la seguridad a nivel de fila para que la tabla pueda aplicar políticas de acceso por request.
 alter table nodos enable row level security;
 
 -- Política simple: cualquiera con la anon key puede leer y escribir.

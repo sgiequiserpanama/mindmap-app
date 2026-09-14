@@ -1,4 +1,4 @@
-/* ---------- Tokens (tema claro estilo GitMind) ---------- */
+/* ---------- Tokens (tema claro estilo GitMind): definen los colores y fuentes base del proyecto para mantener un estilo visual coherente ---------- */
 :root {
   --fondo-lienzo: #ffffff;
   --header-bg: #ffffff;
@@ -34,8 +34,9 @@ body {
   color: var(--texto-principal);
 }
 
-/* ---------- Layout general ---------- */
+/* ---------- Layout general: organiza la estructura principal de la aplicación, con cabecera, contenido y lienzo --------- */
 .app-contenedor {
+  /* Mantiene toda la interfaz en una columna vertical con altura completa para que el mapa ocupe el espacio restante. */
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -43,6 +44,7 @@ body {
 }
 
 .app-header {
+  /* La cabecera del editor sirve como barra principal de navegación y de estado del mapa mental. */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -97,6 +99,7 @@ body {
 }
 
 .barra-acciones-nodo {
+  /* Esta barra contextual ofrece las acciones rápidas del nodo seleccionado, como editar, cambiar forma o añadir contenido extra. */
   position: sticky;
   top: 0;
   z-index: 15;
@@ -169,6 +172,7 @@ body {
 }
 
 .barra-editor {
+  /* Los editores rápidos permiten modificar enlaces y notas sin abrir una vista separada, manteniendo el flujo de edición ágil. */
   display: flex;
   gap: 8px;
   align-items: center;
@@ -216,16 +220,16 @@ body {
   font-size: 1.1rem;
 }
 
-/* ---------- Lienzo de React Flow ---------- */
+/* ---------- Lienzo de React Flow: controla el área principal donde se visualizan, organizan y conectan los nodos del mapa mental ---------- */
 .react-flow__background {
   background-color: var(--fondo-lienzo);
 }
 
 .react-flow__controls {
   background: #ffffff;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   border: 1px solid var(--header-borde);
 }
 
@@ -235,25 +239,35 @@ body {
 }
 
 .react-flow__minimap {
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
-/* ---------- Nodo personalizado ---------- */
+/* ---------- Nodo personalizado: define la apariencia visual de cada nodo del mapa mental, incluyendo forma, color, texto, notas e imágenes ---------- */
 .nodo-mapa {
+  /* Cada nodo visual se dibuja con un fondo, borde, tamaño y sombra que ayudan a diferenciar ramas dentro del mapa.
+     El ancho real del nodo se controla con --nodo-ancho, que se actualiza desde JavaScript al redimensionar. */
   background: var(--nodo-bg);
-  border: 1.5px solid #d5dbe3;
+  border: 1.5px solid var(--nodo-color);
   border-radius: 8px;
   padding: 10px 14px;
-  min-width: 100px;
-  max-width:  150px;
-  width: max-content;
+  width: var(--nodo-ancho);
+  min-width: 120px;
+  max-width: none;
   min-height: 42px;
   height: auto;
   display: inline-block;
   box-shadow: 0 2px 6px var(--nodo-sombra);
   position: relative;
+}
+
+.nodo-raiz {
+  border-color: var(--nodo-color);
+}
+
+.nodo-raiz .nodo-texto {
+  font-weight: 150;
 }
 
 .nodo-sin-marco {
@@ -262,23 +276,29 @@ body {
   border-radius: 0 !important;
   box-shadow: none !important;
   padding: 0px 8px !important;
-  min-width: 0 !important;
 }
 
 .nodo-sin-marco .nodo-contenido {
   padding: 0;
   gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
 }
 
 .nodo-sin-marco .nodo-texto {
   background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .nodo-contenido {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 24px;
+  min-height: 10px;
   height: auto;
 }
 
@@ -287,7 +307,7 @@ body {
   color: var(--texto-principal);
   cursor: text;
   flex: 1;
-  max-width: 180px;
+  max-width: 80px;
   min-width: 0;
   overflow-wrap: anywhere;
   word-wrap: break-word;
@@ -297,7 +317,7 @@ body {
 }
 
 .nodo-input {
-  font-size: 0.95rem;
+  font-size: 0.65rem;
   font-family: var(--fuente-cuerpo);
   border: 1px solid var(--raiz-acento);
   border-radius: 4px;
@@ -466,7 +486,7 @@ body {
   resize: vertical;
 }
 
-/* ---------- Pantalla de inicio (Mis Mapas) ---------- */
+/* ---------- Pantalla de inicio (Mis Mapas): da formato a la vista de listados y creación de mapas, antes de entrar al editor ---------- */
 .app-header-izquierda {
   display: flex;
   align-items: center;
@@ -575,7 +595,7 @@ body {
   background: rgba(224, 85, 79, 0.1);
 }
 
-/* ---------- Botones de vista y exportar ---------- */
+/* ---------- Botones de vista y exportar: controla los controles de cambio entre mapa y esquema y las acciones de descarga del contenido ---------- */
 .boton-vista {
   background: transparent;
   border: 1px solid var(--header-borde);
@@ -606,7 +626,7 @@ body {
   border-color: var(--raiz-acento);
 }
 
-/* ---------- Formas de nodo ---------- */
+/* ---------- Formas de nodo: ajusta la geometría del nodo para alternar entre rectángulos, bordes redondeados y formas ovaladas ---------- */
 .nodo-forma-rectangulo {
   border-radius: 8px;
 }
@@ -635,7 +655,7 @@ body {
   background: rgba(74, 144, 226, 0.08);
 }
 
-/* ---------- Emoji / icono ---------- */
+/* ---------- Emoji / icono: define los paneles y botones para asignar iconos rápidos a cada nodo y mejorar la identificación visual ---------- */
 .nodo-boton-emoji {
   border: none;
   background: transparent;
@@ -677,8 +697,9 @@ body {
   background: #f1f4f8;
 }
 
-/* ---------- Vista de esquema ---------- */
+/* ---------- Vista de esquema: organiza la representación jerárquica del mapa mental para inspeccionar la estructura de ramas y niveles ---------- */
 .esquema-contenedor {
+  /* La vista de esquema presenta el mapa como jerarquía para entender mejor la relación entre ramas y subniveles. */
   height: 100%;
   overflow: auto;
   padding: 40px 18px 24px;
@@ -861,6 +882,16 @@ body {
   padding: 6px 10px;
   min-width: 180px;
   background: rgba(255, 255, 255, 0.95);
+}
+
+.react-flow__resize-control.handle {
+  opacity: 0;
+}
+
+.react-flow__handle.connectable {
+  &:not(.react-flow__handle-left) {
+    opacity: 0;
+  }
 }
 
 @media (max-width: 900px) {
